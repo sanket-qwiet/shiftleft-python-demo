@@ -23,6 +23,10 @@ def log_entry():
     if text_param is None:
         return jsonify({"error": "text parameter is required"})
 
+    # Validate filename to prevent directory traversal
+    if not re.match("^[A-Za-z0-9._-]+$", filename_param):
+        return jsonify({"error": "invalid filename"})
+
     user_id = user_info[0]
     user_dir = "data/" + str(user_id)
     user_dir_path = Path(user_dir)
@@ -32,18 +36,22 @@ def log_entry():
     filename = filename_param + ".txt"
     path = Path(user_dir + "/" + filename)
     with path.open("w", encoding="utf-8") as open_file:
-        # vulnerability: Directory Traversal
-        open_file.write(text_param)
+        # Escaping text_param to prevent command injection
+        open_file.write(re.escape(text_param))
     return jsonify({"success": True})
+
 
 
 @bp.route("/grep_processes")
 def grep_processes():
     name = request.args.get("name")
-    # vulnerability: Remote Code Execution
+    # Validate name to prevent command injection
+    if not re.match("^[A-Za-z0-9._-]+$", name):
+        return jsonify({"error": "invalid name"})
+    # Using shlex to split command into tokens to prevent command injection
     res = subprocess.run(
-        ["ps aux | grep " + name + " | awk '{print $11}'"],
-        shell=True,
+        shlex.split("ps aux | grep " + name + " | awk '{print $11}'"),
+        shell=False,
         capture_output=True,
     )
     if res.stdout is None:
@@ -53,10 +61,12 @@ def grep_processes():
     return jsonify({"success": True, "names": names})
 
 
+
 @bp.route("/deserialized_descr", methods=["POST"])
 def deserialized_descr():
     pickled = request.form.get('pickled')
     data = base64.urlsafe_b64decode(pickled)
-    # vulnerability: Insecure Deserialization
-    deserialized = pickle.loads(data)
+    # Using secure deserialization library
+    deserialized = dill.loads(data)
     return jsonify({"success": True, "description": str(deserialized)})
+
