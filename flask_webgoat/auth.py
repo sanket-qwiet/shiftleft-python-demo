@@ -14,14 +14,13 @@ def login():
             400,
         )
 
-    # vulnerability: SQL Injection mitigated
-    query = "SELECT id, username, access_level FROM user WHERE username = ? AND password = ?"
+    # vulnerability: SQL Injection
+    query = "SELECT id, username, access_level FROM user WHERE username = %s AND password = %s"
     result = query_db(query, (username, password), True)
     if result is None:
         return jsonify({"bad_login": True}), 400
     session["user_info"] = (result[0], result[1], result[2])
     return jsonify({"success": True})
-
 
 
 @bp.route("/login_and_redirect")
@@ -37,10 +36,22 @@ def login_and_redirect():
             400,
         )
 
-    query = "SELECT id, username, access_level FROM user WHERE username = ? AND password = ?"
+    # Validate or sanitize the URL before redirecting
+    def is_safe_url(target):
+        ref_url = urlparse(request.host_url)
+        test_url = urlparse(urljoin(request.host_url, target))
+        return test_url.scheme in ('http', 'https') and \
+               ref_url.netloc == test_url.netloc
+
+    if not is_safe_url(url):
+        return jsonify({"error": "Unsafe URL"}), 400
+
+    query = "SELECT id, username, access_level FROM user WHERE username = %s AND password = %s"
     result = query_db(query, (username, password), True)
     if result is None:
         # vulnerability: Open Redirect
         return redirect(url)
     session["user_info"] = (result[0], result[1], result[2])
     return jsonify({"success": True})
+
+
