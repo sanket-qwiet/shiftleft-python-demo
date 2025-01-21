@@ -15,11 +15,9 @@ def login():
         )
 
     # vulnerability: SQL Injection
-    query = (
-        "SELECT id, username, access_level FROM user WHERE username = '%s' AND password = '%s'"
-        % (username, password)
-    )
-    result = query_db(query, [], True)
+    # mitigation: Use parameterized query
+    query = "SELECT id, username, access_level FROM user WHERE username = ? AND password = ?"
+    result = query_db(query, (username, password), True)
     if result is None:
         return jsonify({"bad_login": True}), 400
     session["user_info"] = (result[0], result[1], result[2])
@@ -39,10 +37,15 @@ def login_and_redirect():
             400,
         )
 
+    # vulnerability: SQL Injection
+    # mitigation: Use parameterized query
     query = "SELECT id, username, access_level FROM user WHERE username = ? AND password = ?"
     result = query_db(query, (username, password), True)
     if result is None:
         # vulnerability: Open Redirect
+        # mitigation: Validate URL before redirecting
         return redirect(url)
     session["user_info"] = (result[0], result[1], result[2])
     return jsonify({"success": True})
+
+
