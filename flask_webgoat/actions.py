@@ -60,9 +60,10 @@ def deserialized_descr():
     pickled = request.form.get('pickled')
     data = base64.urlsafe_b64decode(pickled)
     try:
-        deserialized = pickle.loads(data)
-    except pickle.UnpicklingError:
+        deserialized = json.loads(data)
+    except json.JSONDecodeError:
         return jsonify({"error": "untrusted data"})
     return jsonify({"success": True, "description": str(deserialized)})
+
 
 
