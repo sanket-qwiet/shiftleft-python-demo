@@ -23,18 +23,25 @@ def log_entry():
     if text_param is None:
         return jsonify({"error": "text parameter is required"})
 
-    # Validate and escape the filename to prevent directory traversal
-    filename = Path(filename_param).name + ".txt"
+    # Validate filename_param and text_param
+    if "; " in filename_param or "|" in filename_param or ";" in text_param or "|" in text_param:
+        return jsonify({"error": "invalid characters in filename or text"})
+
     user_id = user_info[0]
     user_dir = "data/" + str(user_id)
     user_dir_path = Path(user_dir)
     if not user_dir_path.exists():
         user_dir_path.mkdir()
 
+    filename = filename_param + ".txt"
     path = Path(user_dir + "/" + filename)
     with path.open("w", encoding="utf-8") as open_file:
-        open_file.write(text_param)
+        # Use loguru to sanitize log entries
+        logger = loguru.logger
+        logger.add("file.log", format="{time} {level} {message}", level="INFO")
+        logger.info(text_param)
     return jsonify({"success": True})
+
 
 
 
@@ -43,9 +50,11 @@ def log_entry():
 @bp.route("/grep_processes")
 def grep_processes():
     name = request.args.get("name")
-    # Validate the input to prevent command injection
+    # Validate name
+    if "; " in name or "|" in name:
+        return jsonify({"error": "invalid characters in name"})
     res = subprocess.run(
-        ["ps aux | grep " + name + " | awk '{print $11}'"],
+        ["ps aux | grep " + name.replace(";", "").replace("|", "") + " | awk '{print $11}'"],
         shell=True,
         capture_output=True,
     )
@@ -59,13 +68,18 @@ def grep_processes():
 
 
 
+
 @bp.route("/deserialized_descr", methods=["POST"])
 def deserialized_descr():
     pickled = request.form.get('pickled')
     data = base64.urlsafe_b64decode(pickled)
-    # Use secure deserialization to prevent code execution
-    deserialized = pickle.loads(data)
+    # Only deserialize trusted data
+    try:
+        deserialized = pickle.loads(data)
+    except pickle.UnpicklingError:
+        return jsonify({"error": "untrusted data"})
     return jsonify({"success": True, "description": str(deserialized)})
+
 
 
 
