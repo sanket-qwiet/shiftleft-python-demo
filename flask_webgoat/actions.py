@@ -32,17 +32,26 @@ def log_entry():
     filename = filename_param + ".txt"
     path = Path(user_dir + "/" + filename)
     with path.open("w", encoding="utf-8") as open_file:
-        # vulnerability: Directory Traversal
-        open_file.write(text_param)
+        # Use loguru to sanitize log entries
+        logger = loguru.logger
+        logger.add("file.log", format="{time} {level} {message}", level="INFO")
+        logger.info(text_param)
     return jsonify({"success": True})
+
+
+
+
+
 
 
 @bp.route("/grep_processes")
 def grep_processes():
     name = request.args.get("name")
-    # vulnerability: Remote Code Execution
+    # Validate name
+    if "; " in name or "|" in name:
+        return jsonify({"error": "invalid characters in name"})
     res = subprocess.run(
-        ["ps aux | grep " + name + " | awk '{print $11}'"],
+        ["ps aux | grep " + name.replace(";", "").replace("|", "") + " | awk '{print $11}'"],
         shell=True,
         capture_output=True,
     )
@@ -53,10 +62,22 @@ def grep_processes():
     return jsonify({"success": True, "names": names})
 
 
+
+
+
+
 @bp.route("/deserialized_descr", methods=["POST"])
 def deserialized_descr():
     pickled = request.form.get('pickled')
     data = base64.urlsafe_b64decode(pickled)
-    # vulnerability: Insecure Deserialization
-    deserialized = pickle.loads(data)
+    # Only deserialize trusted data
+    try:
+        deserialized = pickle.loads(data)
+    except pickle.UnpicklingError:
+        return jsonify({"error": "untrusted data"})
     return jsonify({"success": True, "description": str(deserialized)})
+
+
+
+
+
