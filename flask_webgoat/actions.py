@@ -23,10 +23,6 @@ def log_entry():
     if text_param is None:
         return jsonify({"error": "text parameter is required"})
 
-    # Validate filename_param and text_param
-    if "; " in filename_param or "|" in filename_param or ";" in text_param or "|" in text_param:
-        return jsonify({"error": "invalid characters in filename or text"})
-
     user_id = user_info[0]
     user_dir = "data/" + str(user_id)
     user_dir_path = Path(user_dir)
@@ -41,6 +37,7 @@ def log_entry():
         logger.add("file.log", format="{time} {level} {message}", level="INFO")
         logger.info(text_param)
     return jsonify({"success": True})
+
 
 
 
