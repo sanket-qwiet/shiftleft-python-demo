@@ -55,8 +55,57 @@ def grep_processes():
 
 @bp.route("/deserialized_descr", methods=["POST"])
 def deserialized_descr():
-    pickled = request.form.get('pickled')
-    data = base64.urlsafe_b64decode(pickled)
-    # vulnerability: Insecure Deserialization
-    deserialized = pickle.loads(data)
-    return jsonify({"success": True, "description": str(deserialized)})
+def deserialized_descr():
+    encoded_data = request.form.get('data')
+    if not encoded_data:
+        return jsonify({"error": "Missing required data parameter"})
+    
+    # Implement size limits to prevent DoS attacks
+    MAX_DATA_SIZE = 10240  # 10KB limit
+    if len(encoded_data) > MAX_DATA_SIZE:
+        return jsonify({"error": "Data payload too large"})
+        
+    try:
+        # Using JSON instead of pickle for secure deserialization
+        decoded = base64.urlsafe_b64decode(encoded_data)
+        
+        # Add data integrity check with HMAC validation
+        if b'.' not in decoded:
+            return jsonify({"error": "Invalid data format: missing signature"})
+            
+        serialized, signature = decoded.split(b'.', 1)
+        expected_sig = hmac.digest(request.secret_key.encode(), serialized, 'sha256')
+        if not hmac.compare_digest(signature, expected_sig):
+            return jsonify({"error": "Invalid signature"})
+            
+        data = serialized.decode('utf-8')
+        deserialized = json.loads(data)
+        
+        # Implement type safety
+        if not isinstance(deserialized, dict):
+            return jsonify({"error": "Invalid data structure: expected object"})
+        
+        # Add schema validation
+        schema = {
+            "type": "object",
+            "properties": {
+                "description": {"type": "string"},
+                "metadata": {"type": "object"}
+            },
+            "required": ["description"]
+        }
+        jsonschema.validate(instance=deserialized, schema=schema)
+        
+        # Use contextual output encoding for the response
+        safe_description = escape(json.dumps(deserialized))
+        return jsonify({"success": True, "description": safe_description})
+    except jsonschema.exceptions.ValidationError as e:
+        return jsonify({"error": f"Schema validation failed: {str(e)}"})
+    except Exception as e:
+        return jsonify({"error": f"Invalid data format: {str(e)}"})
+
+def create_signed_data(data):
+    """Helper function to create signed data for secure deserialization"""
+    serialized = json.dumps(data)
+    signature = hmac.digest(request.secret_key.encode(), serialized.encode(), 'sha256')
+    return base64.urlsafe_b64encode(serialized.encode() + b'.' + signature)
