@@ -33,15 +33,22 @@ def create_user():
             jsonify({"error": "the password needs to be at least 3 characters long"}),
             402,
         )
+    
+    # Validate access_level is within expected range
+    try:
+        access_level_int = int(access_level)
+        if access_level_int < 0:
+            return jsonify({"error": "access_level must be a non-negative integer"}), 400
+    except ValueError:
+        return jsonify({"error": "access_level must be an integer"}), 400
 
-    # vulnerability: SQL Injection
-    query = (
-        "INSERT INTO user (username, password, access_level) VALUES ('%s', '%s', %d)"
-        % (username, password, int(access_level))
-    )
+    # Fixed: Using parameterized query to prevent SQL injection
+    query = "INSERT INTO user (username, password, access_level) VALUES (?, ?, ?)"
+    params = [username, password, access_level_int]
 
     try:
-        query_db(query, [], False, True)
+        query_db(query, params, False, True)
         return jsonify({"success": True})
     except sqlite3.Error as err:
-        return jsonify({"error": "could not create user:" + err})
+        return jsonify({"error": "could not create user: " + str(err)})
+
