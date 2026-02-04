@@ -16,9 +16,12 @@ def create_user():
     access_level = user_info[2]
     if access_level != 0:
         return jsonify({"error": "access level of 0 is required for this action"})
+    
+    # Get form data
     username = request.form.get("username")
     password = request.form.get("password")
     access_level = request.form.get("access_level")
+    
     if username is None or password is None or access_level is None:
         return (
             jsonify(
@@ -33,15 +36,39 @@ def create_user():
             jsonify({"error": "the password needs to be at least 3 characters long"}),
             402,
         )
-
-    # vulnerability: SQL Injection
-    query = (
-        "INSERT INTO user (username, password, access_level) VALUES ('%s', '%s', %d)"
-        % (username, password, int(access_level))
-    )
-
+    
+    # Input validation to prevent malicious characters
+    if not re.match(r'^[a-zA-Z0-9_]+$', username):
+        return jsonify({"error": "Username contains invalid characters"}), 400
+    
+    # Enforce maximum input length restrictions
+    if len(username) > 50 or len(password) > 100:
+        return jsonify({"error": "Username or password exceeds maximum length"}), 400
+    
+    # Additional input sanitization
+    username = bleach.clean(username, strip=True)
+    
+    # Hash the password instead of storing plaintext
+    hashed_password = generate_password_hash(password)
+    
     try:
-        query_db(query, [], False, True)
+        # Use SQLAlchemy for prepared statements
+        engine = create_engine('sqlite:///instance/db.sqlite')
+        with engine.connect() as conn:
+            # Define allowed queries (query whitelisting)
+            allowed_queries = {
+                "insert_user": "INSERT INTO user (username, password, access_level) VALUES (:username, :password, :access_level)"
+            }
+            
+            # Use the whitelisted query
+            stmt = text(allowed_queries["insert_user"])
+            
+            # Execute using prepared statement
+            conn.execute(stmt, {"username": username, "password": hashed_password, "access_level": int(access_level)})
+            conn.commit()
+            
         return jsonify({"success": True})
-    except sqlite3.Error as err:
-        return jsonify({"error": "could not create user:" + err})
+    except Exception as err:
+        # Proper error handling without exposing SQL error details
+        return jsonify({"error": "Could not create user due to database error"}), 500
+
